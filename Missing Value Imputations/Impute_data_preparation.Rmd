@@ -20,10 +20,10 @@ removed_var <- c("HHX","RECTYPE","SRVY_YR","PPSU","WTFA_A","PSTRAT","PPSU","HHST
 miss_impute <- miss_impute[,!colnames(miss_impute) %in% removed_var]
 
 impute_var <- c("CVDDIAG_A", "COVIDTEST_A", "DLYCARE_A", "DNGCARE_A", 
-                "VIRAPP12M_A", "HOMECAREDG_A", "FAMCARE12M_A", "FAMCAREDNG_A")
+                "VIRAPP12M_A", "HOMECAREDG_A", "FAMCAREDNG_A")
 for (i in impute_var){
   miss_impute[,i] <- ifelse(miss_impute[,i]>=7,NA,miss_impute[,i])
 }
-nrow(miss_impute %>% drop_na(CVDDIAG_A, COVIDTEST_A, DLYCARE_A, DNGCARE_A, VIRAPP12M_A,HOMECAREDG_A, FAMCARE12M_A, FAMCAREDNG_A))
+nrow(miss_impute %>% drop_na(CVDDIAG_A, COVIDTEST_A, DLYCARE_A, DNGCARE_A, VIRAPP12M_A,HOMECAREDG_A, FAMCAREDNG_A))
 write.csv(miss_impute, "imputation_data1130.csv",row.names=FALSE)
 ```
