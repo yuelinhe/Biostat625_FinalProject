@@ -1,0 +1,55 @@
+---
+title: "Multiple imputations trials"
+author: "Yuelin He"
+date: "12/1/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(srvyr)
+library(corrplot)
+library(ggplot2)
+library(srvyr)
+library(Hmisc)
+library(mice)
+```
+
+
+```{r}
+imp_data <- read.csv("imputation_data1130.csv")
+```
+
+
+
+use transcan to imput NA
+
+COVID: CVDDIAG_A(13856 ), COVIDTEST_A(13856) 
+Access to care (related to covid): DLYCARE_A(13856), DNGCARE_A(13856), VIRAPP12M_A(13856 )
+Family care due to covid: HOMECAREDG_A(13856) FAMCAREDNG_A(13856)
+
+```{r}
+covid_related <- c("CVDDIAG_A", "COVIDTEST_A", "DLYCARE_A", "DNGCARE_A", "VIRAPP12M_A", "HOMECAREDG_A", "FAMCAREDNG_A")
+```
+
+
+```{r}
+imp_data[covid_related] <- lapply(imp_data[covid_related], factor) 
+#table(imp_data$FAMCAREDNG_A)
+```
+
+# Try mice
+
+```{r}
+init = mice(imp_data, maxit=0) 
+meth = init$method
+predM = init$predictorMatrix
+
+# set methods for those need to be imputed only
+meth[!names(meth) %in% covid_related] <- ""
+
+mice_imp <- mice(imp_data, method=meth, predictorMatrix=predM, m=5)
+complete(mice_imp,"long")
+complete(mice_imp)
+```
