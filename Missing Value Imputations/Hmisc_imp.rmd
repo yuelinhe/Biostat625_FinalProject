@@ -1,0 +1,78 @@
+---
+title: "625_final_project"
+author: "Jiaxin Qian"
+date: "11/15/2021"
+output: html_document
+---
+
+# Read-in data
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(srvyr)
+library(corrplot)
+library(ggplot2)
+library(srvyr)
+library(Hmisc)
+
+```
+
+
+```{r}
+imp_data <- read.csv("imputation_data1130.csv")
+```
+
+
+
+use transcan to imput NA
+
+COVID: CVDDIAG_A(13856 ), COVIDTEST_A(13856) 
+Access to care (related to covid): DLYCARE_A(13856), DNGCARE_A(13856), VIRAPP12M_A(13856 )
+Family care due to covid: HOMECAREDG_A(13856) FAMCAREDNG_A(13856)
+
+```{r}
+covid_related <- c("CVDDIAG_A", "COVIDTEST_A", "DLYCARE_A", "DNGCARE_A", "VIRAPP12M_A", "HOMECAREDG_A", "FAMCAREDNG_A")
+```
+
+
+```{r}
+imp_data[covid_related] <- lapply(imp_data[covid_related], factor) 
+
+#table(imp_data$FAMCAREDNG_A)
+```
+
+#(fmla <- as.formula(paste(" ~ ", paste(covid_related, collapse=" +"))))
+
+
+```{r}
+impute_arg_full <- aregImpute(~ CVDDIAG_A + COVIDTEST_A + DLYCARE_A + DNGCARE_A + VIRAPP12M_A + HOMECAREDG_A + FAMCAREDNG_A, data = imp_data, n.impute = 5)
+impute_arg_full
+```
+
+Get the imputed values for these 7 variables, each varirable has 5 imputations
+```{r}
+na_imp <- impute_arg_full$imputed
+```
+
+get the imputation matrix for each variable
+```{r}
+imp_CVDDIAG_A <- impute_arg_full$imputed$CVDDIAG_A
+imp_COVIDTEST_A <- impute_arg_full$imputed$COVIDTEST_A
+imp_DLYCARE_A <- impute_arg_full$imputed$DLYCARE_A
+imp_DNGCARE_A <- impute_arg_full$imputed$DNGCARE_A
+imp_VIRAPP12M_A <- impute_arg_full$imputed$VIRAPP12M_A
+imp_HOMECAREDG_A <- impute_arg_full$imputed$HOMECAREDG_A
+imp_FAMCAREDNG_A <- impute_arg_full$imputed$FAMCAREDNG_A
+```
+
+maybe get the mode?
+```{r}
+imp_CVDDIAG_A[which(rowSums(imp_CVDDIAG_A)<8),]
+
+
+```
+
+```{r}
+imp_CVDDIAG_A["2621",]
+```
+
