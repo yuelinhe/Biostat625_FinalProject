@@ -1,0 +1,180 @@
+---
+title: "weighted_logistic regression"
+author: "Yiwen Chen"
+date: "2021/12/12"
+output: pdf_document
+---
+
+```{r}
+library(tidyverse)
+library(srvyr)
+library(survey)
+```
+# Trial on building weighted logistic regression models
+
+# adding the survey-related variables back to the dataset to be used
+
+```{r}
+full <- read.csv("adult20.csv")
+imputed1 <- read.csv("imputed dataset/imp_data1.csv")
+imputed1$HHX <- full$HHX
+imputed1$WTFA_A <- full$WTFA_A
+imputed1$PSTRAT <- full$PSTRAT
+imputed1$PPSU <- full$PPSU
+```
+
+```{r}
+imputed1_new <- imputed1 %>% select(
+  ##survey design
+  HHX, WTFA_A, URBRRL, REGION, PSTRAT, PPSU,
+  ## outcome
+  MHRX_A, MHTHRPY_A, # mental health
+  DEPEV_A, DEPFREQ_A, DEPMED_A, # depression
+  ANXEV_A, ANXFREQ_A, ANXMED_A, # anxiety
+  ##predictors, contain the imputed values
+  CVDDIAG_A, COVIDTEST_A, 
+  DLYCARE_A, DNGCARE_A, VIRAPP12M_A, 
+  HOMECAREDG_A, FAMCAREDNG_A, 
+  ##confounders ## no NAs
+  AGEP_A, SEX_A, EDUC_A, 
+  HISPALLP_A# r/e
+  ) 
+```
+
+```{r}
+dim(imputed1_new) #31568 observations, 25 variables
+sum(is.na(imputed1_new))
+for(i in 1:25){
+  if(sum(is.na(imputed1_new[[i]]))!=0){
+    print(colnames(imputed1_new[i]))
+  }
+}
+#only MHRX_A contains NA values
+```
+```{r}
+imputed1_mhrx <- na.omit(imputed1_new)
+dim(imputed1_mhrx)#26200 observations, 25 variables, only drops NA's for MHRX_A, so we only use this cleaned dataset for predicitng MHRX_A
+```
+### Survey Object
+
+
+```{r}
+design1 <- imputed1_new %>%
+  as_survey_design( # might need to change based on our variable names and design
+    ids = HHX,
+    strata = PSTRAT,
+    weights = WTFA_A,
+    nest = TRUE
+  ) ########should we include PPSU in the design object??
+
+
+design1mhrx <- imputed1_mhrx %>%
+  as_survey_design( # might need to change based on our variable names and design
+    ids = HHX,
+    strata = PSTRAT,
+    weights = WTFA_A,
+    nest = TRUE
+  ) 
+```
+
+### Multiple Logistic Regression
+
+#### MHRX_A
+
+```{r}
+MHRX_A_imputed1_logit <- svyglm(
+  MHRX_A ~CVDDIAG_A + COVIDTEST_A + DLYCARE_A + DNGCARE_A + VIRAPP12M_A + HOMECAREDG_A + FAMCAREDNG_A + AGEP_A + SEX_A + EDUC_A + HISPALLP_A,  # change the equation here
+  family = stats::gaussian(), 
+  design = design1mhrx
+)
+
+summary(MHRX_A_imputed1_logit)
+```
+
+
+
+#### MHTHRPY_A
+
+```{r}
+MHTHRPY_A_imputed1_logit <- svyglm(
+  MHTHRPY_A ~CVDDIAG_A + COVIDTEST_A + DLYCARE_A + DNGCARE_A + VIRAPP12M_A + HOMECAREDG_A + FAMCAREDNG_A + AGEP_A + SEX_A + EDUC_A + HISPALLP_A,  # change the equation here
+  family = stats::gaussian(), 
+  design = design1
+)
+
+summary(MHTHRPY_A_imputed1_logit)
+```
+
+#### DEPEV_A
+
+```{r}
+DEPEV_A_imputed1_logit <- svyglm(
+  MHTHRPY_A ~CVDDIAG_A + COVIDTEST_A + DLYCARE_A + DNGCARE_A + VIRAPP12M_A + HOMECAREDG_A + FAMCAREDNG_A + AGEP_A + SEX_A + EDUC_A + HISPALLP_A,  # change the equation here
+  family = stats::gaussian(), 
+  design = design1
+)
+
+summary(DEPEV_A_imputed1_logit)
+```
+
+#### DEPFREQ_A
+
+```{r}
+DEPFREQ_A_imputed1_logit <- svyglm(
+  DEPFREQ_A ~CVDDIAG_A + COVIDTEST_A + DLYCARE_A + DNGCARE_A + VIRAPP12M_A + HOMECAREDG_A + FAMCAREDNG_A + AGEP_A + SEX_A + EDUC_A + HISPALLP_A,  # change the equation here
+  family = stats::gaussian(), 
+  design = design1
+)
+
+summary(DEPFREQ_A_imputed1_logit)
+```
+
+#### DEPMED_A
+
+```{r}
+DEPMED_A_imputed1_logit <- svyglm(
+  DEPMED_A ~CVDDIAG_A + COVIDTEST_A + DLYCARE_A + DNGCARE_A + VIRAPP12M_A + HOMECAREDG_A + FAMCAREDNG_A + AGEP_A + SEX_A + EDUC_A + HISPALLP_A,  # change the equation here
+  family = stats::gaussian(), 
+  design = design1
+)
+
+summary(DEPMED_A_imputed1_logit)
+```
+
+#### ANXEV_A 
+
+```{r}
+ANXEV_A_imputed1_logit <- svyglm(
+  ANXEV_A ~CVDDIAG_A + COVIDTEST_A + DLYCARE_A + DNGCARE_A + VIRAPP12M_A + HOMECAREDG_A + FAMCAREDNG_A + AGEP_A + SEX_A + EDUC_A + HISPALLP_A,  # change the equation here
+  family = stats::gaussian(), 
+  design = design1
+)
+
+summary(ANXEV_A_imputed1_logit)
+```
+
+#### ANXFREQ_A
+
+```{r}
+ANXFREQ_A_imputed1_logit <- svyglm(
+  ANXFREQ_A ~CVDDIAG_A + COVIDTEST_A + DLYCARE_A + DNGCARE_A + VIRAPP12M_A + HOMECAREDG_A + FAMCAREDNG_A + AGEP_A + SEX_A + EDUC_A + HISPALLP_A,  # change the equation here
+  family = stats::gaussian(), 
+  design = design1
+)
+
+summary(ANXFREQ_A_imputed1_logit)
+```
+
+
+#### ANXMED_A
+
+```{r}
+ANXMED_A_imputed1_logit <- svyglm(
+  ANXMED_A ~CVDDIAG_A + COVIDTEST_A + DLYCARE_A + DNGCARE_A + VIRAPP12M_A + HOMECAREDG_A + FAMCAREDNG_A + AGEP_A + SEX_A + EDUC_A + HISPALLP_A,  # change the equation here
+  family = stats::gaussian(), 
+  design = design1
+)
+
+summary(ANXMED_A_imputed1_logit)
+```
+
