@@ -1,7 +1,7 @@
 ---
 title: "weighted_logistic regression"
-author: "Yiwen Chen"
-date: "2021/12/12"
+author: "Yuelin He"
+date: "2021/12/13"
 output: pdf_document
 ---
 
@@ -81,14 +81,21 @@ imputed1_new$HISPALLP_A <- dplyr::recode(as.character(imputed1_new$HISPALLP_A),
 imputed1_new$HISPALLP_A <- relevel(as.factor(imputed1_new$HISPALLP_A),ref="NH White")
 
 ## categorize age?? ('97'='Refused','98'='Not ascertained','99'='unknown')
-summary(imputed1_new)
+
+imputed1_new$AGEP_A <- case_when(
+  imputed1_new$AGEP_A<=44 & imputed1_new$AGEP_A>=18 ~ "18-44",
+  imputed1_new$AGEP_A<=64 & imputed1_new$AGEP_A>=45 ~ "45-64",
+  imputed1_new$AGEP_A<=85 & imputed1_new$AGEP_A>=65 ~ "65+",
+  TRUE ~ "Unknown"
+)
+# table(imputed1_new$AGEP_A)
 ```
 
 # Fit model for binary outcomes
 
 ```{r}
 # Each time fitting a model, remove only its own unknown outcomes
-
+or.df <- list()
 for (i in binary_var[1:6]){
   imputed1_mhrx <- imputed1_new[imputed1_new[,i]!="Unknown",]
   design1mhrx <- imputed1_mhrx %>%
@@ -108,11 +115,56 @@ for (i in binary_var[1:6]){
   )
   print(i)
   print(summary(MHRX_A_imputed1_logit))
-  }
+  or <- exp(coef(MHRX_A_imputed1_logit)) # extract and exponentiate coefs
+  se <- sqrt(diag(vcov(MHRX_A_imputed1_logit))) # extract Var and covert to SE
+  lower <- exp(coef(MHRX_A_imputed1_logit) - qnorm(0.975) * se) # 95% C.I. lower bound
+  upper <- exp(coef(MHRX_A_imputed1_logit) + qnorm(0.975) * se) # 95% C.I. higher bound
+  p.val <- summary(MHRX_A_imputed1_logit)$coefficients[,4]
+  or.df[[length(or.df)+1]] <- data.frame(cbind(or, lower, upper,p.val)) # create data frame
+}
 ```
 
-# Fit model for multiple outcomes
-## Not working corrrectly yet // or it just take a while to run idk
+# Forest plots
+
+```{r}
+outcome.vars <- c("Took medicine for mental health","Received counseling for mental health","Ever had depression",
+                      "Take medication for depression","Ever had anxiety","Take medication for anxiety")
+
+for (i in 1:6){
+  temp.df <- or.df[[i]][-c(1,11,13,15,20),] # drop the unknown/refused/others categories
+  temp.df$vars <- c("Ever had COVID","Ever been tested for COVID","Delayed medical care","Unreceived medical care","Virtual medical appointment","Unreceived home care","Unreceived family care","Age=45-64","Age=65+","Sex=Male","Education=College or Above","Race=AIAN","Race=Asian","Race=Black","Race=Hispanic")
+  temp.df$vars <- factor(temp.df$vars, levels=rev(temp.df$vars))
+  
+  temp.df$variable.types <- factor(c("COVID test","COVID test",rep("Changed medical care due to COVID",3),rep("Changed home/family care due to COVID",2),rep("Demographic",8)),
+                                levels=c("COVID test","Changed medical care due to COVID",
+    "Changed home/family care due to COVID","Demographic"))
+  
+  print(ggplot(temp.df, aes(y = or, x = vars, color=variable.types)) + 
+    geom_hline(yintercept = 1, linetype = 2) + 
+    geom_point(size=6) + 
+    geom_errorbar(aes(ymin = lower, ymax = upper), width = .2) + 
+    scale_y_log10() + 
+    coord_flip() + 
+    annotate("text", y = rev(temp.df$or), x = 1:nrow(temp.df), label = round(rev(temp.df$or), 2), size=2, color="white") + 
+    # scale_colour_manual(values = color.schema) + 
+    labs(
+      title = outcome.vars[i],
+      x = element_blank(),
+      y = "Odds Ratio",
+      # caption = "National Health Interview Survey (2006 ~ 2018)"
+    ) +
+    theme_bw() +
+    theme(axis.text.y = element_text(size = 11)))
+}
+
+```
+
+
+
+
+
+
+# Fit model for multi-categories outcomes -> take long to run, hard to interpret
 
 ```{r}
 # Each time fitting a model, remove only its own unknown outcomes
@@ -126,9 +178,8 @@ for (i in c('DEPFREQ_A','ANXFREQ_A')){
       weights = WTFA_A,
       nest = TRUE
     )
-  imputed1_mhrx[,i] <- as.integer(imputed1_mhrx[,i])-1
   logit.formula <- as.formula(paste(i,'~CVDDIAG_A + COVIDTEST_A + DLYCARE_A + DNGCARE_A + VIRAPP12M_A + HOMECAREDG_A + FAMCAREDNG_A + AGEP_A + SEX_A + EDUC_A + HISPALLP_A',collapse=''))
-  MHRX_A_imputed1_logit <- svy_vglm(
+  MHRX_A_imputed1_logit <- svy_vglm(#svyVGAM package
     logit.formula,
     family=multinomial, 
     design = design1mhrx
@@ -137,4 +188,35 @@ for (i in c('DEPFREQ_A','ANXFREQ_A')){
   print(summary(MHRX_A_imputed1_logit))
   }
 ```
+
+# Fit model for multiple outcomes - second approach
+# Memory exhausted on my laptop
+
+```{r, eval=FALSE} 
+# Each time fitting a model, remove only its own unknown outcomes
+
+for (i in c('DEPFREQ_A','ANXFREQ_A')){
+  imputed1_mhrx <- imputed1_new[!is.na(imputed1_new[,i]),]
+  design1mhrx <- imputed1_mhrx %>%
+    as_survey_design( # might need to change based on our variable names and design
+      ids = HHX,
+      strata = PSTRAT,
+      weights = WTFA_A,
+      nest = TRUE
+    )
+  logit.formula <- as.formula(paste(i,'~CVDDIAG_A + COVIDTEST_A + DLYCARE_A + DNGCARE_A + VIRAPP12M_A + HOMECAREDG_A + FAMCAREDNG_A + AGEP_A + SEX_A + EDUC_A + HISPALLP_A',collapse=''))
+  MHRX_A_imputed1_logit <- svyolr(#survey package
+    logit.formula,
+    design = as.svrepdesign(design1mhrx),
+    method='logistic'
+  )
+  print(i)
+  print(summary(MHRX_A_imputed1_logit))
+  }
+```
+
+
+
+
+
 
