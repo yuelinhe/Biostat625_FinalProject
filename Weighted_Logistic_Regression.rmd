@@ -13,6 +13,7 @@ library(svyVGAM)
 library(mice)
 library(ggplot2)
 library(cowplot)
+library(gtsummary)
 ```
 
 
@@ -28,8 +29,11 @@ imputed <- lapply(1:5,function(imp){
 
 binary_var <- c("MHRX_A", "MHTHRPY_A", "DEPEV_A", "DEPMED_A", "ANXEV_A", "ANXMED_A", "CVDDIAG_A", "COVIDTEST_A", "DLYCARE_A", "DNGCARE_A", "VIRAPP12M_A", "HOMECAREDG_A", "FAMCAREDNG_A")
 
+outcome.vars <- c("Took medicine for mental health","Received counseling for mental health","Ever had depression",
+                      "Take medication for depression","Ever had anxiety","Take medication for anxiety")
+
 # function to implement weighted logistic regression
-logit.weighted <- function(imputed1, var_name){
+logit.weighted <- function(imputed1, var_name, step=2){
   imputed1$HHX <- full$HHX
   imputed1$WTFA_A <- full$WTFA_A
   imputed1$PSTRAT <- full$PSTRAT
@@ -93,7 +97,13 @@ logit.weighted <- function(imputed1, var_name){
     )
   imputed1_mhrx[,var_name] <- as.integer(ifelse(imputed1_mhrx[,var_name]=='Yes',1,0))
   
-  logit.formula <- as.formula(paste(var_name,'~CVDDIAG_A + COVIDTEST_A + DLYCARE_A + DNGCARE_A + VIRAPP12M_A + HOMECAREDG_A + FAMCAREDNG_A + AGEP_A + SEX_A + EDUC_A + HISPALLP_A',collapse=''))
+  if (step==1){
+    logit.formula <- as.formula(paste(var_name,'~CVDDIAG_A + COVIDTEST_A + DLYCARE_A + DNGCARE_A + VIRAPP12M_A + HOMECAREDG_A + FAMCAREDNG_A',collapse=''))
+  } else {
+    logit.formula <- as.formula(paste(var_name,'~CVDDIAG_A + COVIDTEST_A + DLYCARE_A + DNGCARE_A + VIRAPP12M_A + HOMECAREDG_A + FAMCAREDNG_A + AGEP_A + SEX_A + EDUC_A + HISPALLP_A',collapse=''))
+  }
+  
+  
   MHRX_A_imputed1_logit <- svyglm(
     logit.formula,
     family = quasibinomial(), 
@@ -104,12 +114,39 @@ logit.weighted <- function(imputed1, var_name){
 }
 
 # for each variable, vectorized implementation of weighted logistic regression
+fit.func.unadjusted <- function(v){
+  fit <- lapply(imputed,logit.weighted,var_name=v,step=1) 
+  pool.result <- pool(fit)
+}
 fit.func <- function(v){
   fit <- lapply(imputed,logit.weighted,var_name=v) 
   pool.result <- pool(fit)
 }
 
 # get the odds ratio table
+unadjust.or <- function(i){
+  or <- exp(pool.unadjusted[[i]]$pooled[,'estimate']) # extract and exponentiate coefs
+  se <- summary(pool.unadjusted[[i]])$`std.error`
+  lower <- exp(pool.unadjusted[[i]]$pooled[,'estimate'] - qnorm(0.975) * se) # 95% C.I. lower bound
+  upper <- exp(pool.unadjusted[[i]]$pooled[,'estimate'] + qnorm(0.975) * se) # 95% C.I. higher bound
+  ci <- paste(round(or,2)," (",round(lower,2),"-",round(upper,2),")",sep="")
+  p.val <- summary(pool.unadjusted[[i]])$p.value
+  output <- data.frame(cbind(ci, round(p.val,2)))[-1,] # drop the intercept
+  if (i==1){
+    output <- cbind(c("Ever had COVID","Ever been tested for COVID","Delayed medical care","Unreceived medical care","Virtual medical appointment","Unreceived home care","Unreceived family care"),output)
+    colnames(output) <- c("Covariates","Odds Ratio (95% CI)", "P-value")
+    output.save <- output %>% tibble() %>% gt::gt()  %>%
+  gt::tab_header(
+    title = outcome.vars[i])
+  } else {
+    colnames(output) <- c("Odds Ratio (95% CI)", "P-value")
+    output.save <- output %>% tibble() %>% gt::gt()  %>%
+  gt::tab_header(
+    title = outcome.vars[i])
+  }
+  output.save %>% gt::gtsave(paste(binary_var[i],".odds.png"))
+  return (output)
+}
 get.or <- function(i){
   or <- exp(pool.result[[i]]$pooled[,'estimate']) # extract and exponentiate coefs
   se <- summary(pool.result[[i]])$`std.error`
@@ -132,7 +169,9 @@ get.diagnostics <- function(i){
   return (output)
 }
 
+pool.unadjusted <- lapply(binary_var[1:6],fit.func.unadjusted) 
 pool.result <- lapply(binary_var[1:6],fit.func) 
+unadjusted.df <- lapply(1:6,unadjust.or) # get odds ratios of CI
 or.df <- lapply(1:6,get.or) # get the odds ratios and CI
 diagn.df <- lapply(1:6,get.diagnostics)
 
@@ -141,8 +180,7 @@ diagn.df <- lapply(1:6,get.diagnostics)
 # Forest plots
 
 ```{r}
-outcome.vars <- c("Took medicine for mental health","Received counseling for mental health","Ever had depression",
-                      "Take medication for depression","Ever had anxiety","Take medication for anxiety")
+
 
 plot.list <- list()
 for (i in 1:6){
