@@ -1,7 +1,7 @@
 ---
 title: Impact of COVID-19 and other factors on self-reported mental health in the
   United States (2020)
-author: Yiwen Chen, Jiaxin Qian, Yuelin He, Yijing He (see GitHub REAME for contributions)
+author: Yiwen Chen, Jiaxin Qian, Yuelin He, Yijing He (see GitHub README for contributions)
 output: 
   pdf_document:
     latex_engine: lualatex
