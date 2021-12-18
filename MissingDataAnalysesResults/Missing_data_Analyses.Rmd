@@ -1,0 +1,171 @@
+---
+title: "final proj exploration"
+author: "Yuelin He"
+date: "11/14/2021"
+output: pdf_document
+---
+
+# Read-in data
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(srvyr)
+library(corrplot)
+library(ggplot2)
+library(srvyr)
+library(gtsummary)
+
+adult20 <- read.csv('adult20.csv')
+```
+
+
+## Variable selections & data cleaning - this code will be reused after imputations
+
+```{r}
+data_new <- adult20 %>% select(
+  ##survey design
+  HHX, WTFA_A, URBRRL, REGION, PSTRAT, PPSU,
+  ## outcome
+  MHRX_A, MHTHRPY_A, # mental health
+  DEPEV_A, DEPFREQ_A, DEPMED_A, # depression
+  ANXEV_A, ANXFREQ_A, ANXMED_A, # anxiety
+  ##predictors
+  CVDDIAG_A, COVIDTEST_A, # covid test
+  DLYCARE_A, DNGCARE_A, VIRAPP12M_A, # access to care due to covid
+  HOMECAREDG_A, FAMCAREDNG_A, # family care due to covid
+  ##confounders ## no NAs
+  AGEP_A, SEX_A, EDUC_A, 
+  HISPALLP_A # r/e
+  ) 
+
+# remove NAs in the COVID related questions of our interest
+data_new <- data_new %>% drop_na(CVDDIAG_A, COVIDTEST_A, DLYCARE_A, DNGCARE_A, VIRAPP12M_A,HOMECAREDG_A, FAMCAREDNG_A)
+# 17712 rows, 30 columns
+
+
+# recode yes/no data
+binary_var <- c("MHRX_A", "MHTHRPY_A", "DEPEV_A", "DEPMED_A", "ANXEV_A", "ANXMED_A", "CVDDIAG_A", "COVIDTEST_A", "DLYCARE_A", "DNGCARE_A", "VIRAPP12M_A", "HOMECAREDG_A", "FAMCAREDNG_A")
+for (i in binary_var){
+  data_new[,i] <- dplyr::recode(as.character(data_new[,i]),
+                                '1'='Yes','2'='No','7'='Refused',
+                                '8'='Not ascertained','9'='unknown')
+}
+
+# recode frequency data
+for (i in c('DEPFREQ_A','ANXFREQ_A')){
+  data_new[,i] <- dplyr::recode(as.character(data_new[,i]),
+                                '1'='Daily','2'='Weekly','3'='Monthly',
+                                '4'='A few times a year','5'='Never',
+                                '7'='Refused', '8'='Not ascertained','9'='unknown')
+}
+
+# recode others
+data_new[,'SEX_A'] <- dplyr::recode(as.character(data_new[,'SEX_A']),
+                                '1'='Male','2'='Female','7'='Refused',
+                                '8'='Not ascertained','9'='unknown')
+data_new$EDUC_A <- ifelse(data_new$EDUC_A<=11&data_new$EDUC_A>=5,5,data_new$EDUC_A)
+data_new$EDUC_A <- ifelse(data_new$EDUC_A<=4,0,data_new$EDUC_A)
+data_new$EDUC_A <- ifelse(data_new$EDUC_A%in% c(0,5),data_new$EDUC_A,NA)
+data_new$EDUC_A <- dplyr::recode(as.character(data_new$EDUC_A),
+                                '0'='High School or Below','5'='College or Above')
+data_new$HISPALLP_A <- dplyr::recode(as.character(data_new$HISPALLP_A),
+                                '1'='Hispanic','2'='NH White',
+                                '3'='Black/African American','4'='Asian',
+                                '5'='AIAN','6'='AIAN and any other group',
+                                '7'='Other single and multiple races',
+                                '97'='Refused','98'='Not ascertained','99'='unknown')
+
+
+
+
+data_new2 <- data_new %>% select(CVDDIAG_A, COVIDTEST_A, DLYCARE_A, DNGCARE_A, VIRAPP12M_A,HOMECAREDG_A, FAMCAREDNG_A) 
+
+data_new <- data_new[!apply(data_new2,1,function(x) any(x %in% c('Refused','Not ascertained','unknown'))),]
+```
+
+
+```{r}
+alldat <- adult20 %>% mutate(miss=ifelse(adult20[,'HHX'] %in% data_new[,'HHX'],'Complete', 'Missing')) %>% 
+  select(
+  miss,
+  ##survey design
+  # HHX, WTFA_A, URBRRL, REGION, PSTRAT, PPSU,
+  ## outcome
+  MHRX_A, MHTHRPY_A, # mental health
+  DEPEV_A, DEPFREQ_A, DEPMED_A, # depression
+  ANXEV_A, ANXFREQ_A, ANXMED_A, # anxiety
+
+  AGEP_A, SEX_A, EDUC_A, 
+  HISPALLP_A # r/e
+  ) 
+
+# recode yes/no data
+binary_var <- c("MHRX_A", "MHTHRPY_A", "DEPEV_A", "DEPMED_A", "ANXEV_A", "ANXMED_A")
+for (i in binary_var){
+  alldat[,i] <- ifelse(alldat[,i]>=7,NA,alldat[,i])
+  alldat[,i] <- ifelse(is.na(alldat[,i]),'Unknown',alldat[,i])
+  alldat[,i] <- dplyr::recode(as.character(alldat[,i]),
+                                '1'='Yes','2'='No')
+  alldat[,i] <- factor(alldat[,i],levels=c('Yes','No','Unknown'))
+}
+
+# recode frequency data
+for (i in c('DEPFREQ_A','ANXFREQ_A')){
+  alldat[,i] <- ifelse(alldat[,i]>=7,NA,alldat[,i])
+  alldat[,i] <- dplyr::recode(as.character(alldat[,i]),
+                                '1'='Daily','2'='Weekly','3'='Monthly',
+                                '4'='A few times a year','5'='Never')
+  alldat[,i] <- factor(alldat[,i],levels=c('Daily','Weekly','Monthly','A few times a year','Never'))
+}
+
+# recode others
+alldat[,'SEX_A'] <- dplyr::recode(as.character(alldat[,'SEX_A']),
+                                '1'='Male','2'='Female','7'='Refused or Unknown',
+                                '8'='Refused or Unknown','9'='Refused or Unknown')
+alldat$EDUC_A <- ifelse(alldat$EDUC_A<=11&alldat$EDUC_A>=5,5,alldat$EDUC_A)
+alldat$EDUC_A <- ifelse(alldat$EDUC_A<=4,0,alldat$EDUC_A)
+alldat$EDUC_A <- ifelse(alldat$EDUC_A%in% c(0,5),alldat$EDUC_A,"Unknown")
+alldat$EDUC_A <- dplyr::recode(as.character(alldat$EDUC_A),
+                                '0'='High School or Below','5'='College or Above')
+alldat$HISPALLP_A <- dplyr::recode(as.character(alldat$HISPALLP_A),
+                                '1'='Hispanic','2'='NH White',
+                                '3'='Black/African American','4'='Asian',
+                                '5'='AIAN and any other group','6'='AIAN and any other group',
+                                '7'='Other single and multiple races',
+                                '97'='Refused','98'='Not ascertained','99'='unknown')
+alldat$AGEP_A <- case_when(
+    alldat$AGEP_A<=44 & alldat$AGEP_A>=18 ~ "18-44",
+    alldat$AGEP_A<=64 & alldat$AGEP_A>=45 ~ "45-64",
+    alldat$AGEP_A<=85 & alldat$AGEP_A>=65 ~ "65+",
+    TRUE ~ "Unknown"
+  )
+
+colnames(alldat) <- c("miss","Took medicine for mental health","Received counseling for mental health","Ever had depression","Depression frequency",
+                      "Take medication for depression","Ever had anxiety","Anxiety frequency","Take medication for anxiety",
+                      "Age","Sex","Highest Education","Race/Ethnicity")
+
+# save the first table
+alldat %>% select("miss","Took medicine for mental health","Received counseling for mental health","Ever had depression",
+                      "Take medication for depression","Ever had anxiety","Take medication for anxiety") %>%
+  tbl_summary(by = miss) %>% 
+  add_overall() %>%
+  add_p() %>%
+  bold_labels() %>%
+  modify_header(update = label ~ "**Variable**")%>%    # build gtsummary table
+  as_gt() %>%             # convert to gt table
+  gt::gtsave(             # save table as image
+    filename = "predictors.png"
+  )
+
+# save the second table
+alldat %>% select("miss","Age","Sex","Highest Education","Race/Ethnicity") %>%
+  tbl_summary(by = miss) %>% 
+  add_overall() %>%
+  add_p() %>%
+  bold_labels() %>%
+  modify_header(update = label ~ "**Variable**")%>%    # build gtsummary table
+  as_gt() %>%             # convert to gt table
+  gt::gtsave(             # save table as image
+    filename = "demographics.png"
+  )
+```
