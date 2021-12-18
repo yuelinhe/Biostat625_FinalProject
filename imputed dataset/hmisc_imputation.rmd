@@ -65,7 +65,7 @@ imputed.data <- as.data.frame(do.call(cbind,imputed))
 imp_data[, colnames(imputed.data)] <- imputed.data
 ```
 
-
+# write each imputed dataset into 5 csv files
 ```{r}
 write.csv(imp_data, file = "imp_data1.csv")
 ```
@@ -104,7 +104,4 @@ write.csv(imp_data, file = "imp_data5.csv")
 ```
 
 
-```{r}
-sum(is.na(imp_data[, colnames(imputed.data5)]))
-```
 
