@@ -137,6 +137,12 @@ alldat$HISPALLP_A <- dplyr::recode(as.character(alldat$HISPALLP_A),
                                 '5'='AIAN and any other group','6'='AIAN and any other group',
                                 '7'='Other single and multiple races',
                                 '97'='Refused','98'='Not ascertained','99'='unknown')
+alldat$AGEP_A <- case_when(
+    alldat$AGEP_A<=44 & alldat$AGEP_A>=18 ~ "18-44",
+    alldat$AGEP_A<=64 & alldat$AGEP_A>=45 ~ "45-64",
+    alldat$AGEP_A<=85 & alldat$AGEP_A>=65 ~ "65+",
+    TRUE ~ "Unknown"
+  )
 
 colnames(alldat) <- c("miss","Took medicine for mental health","Received counseling for mental health","Ever had depression","Depression frequency",
                       "Take medication for depression","Ever had anxiety","Anxiety frequency","Take medication for anxiety",
@@ -155,17 +161,6 @@ alldat %>% select("miss","Took medicine for mental health","Received counseling 
     filename = "predictors.png"
   )
 
-alldat %>% select("miss","Depression frequency","Anxiety frequency") %>%
-  tbl_summary(by = miss) %>% 
-  add_overall() %>%
-  add_p() %>%
-  bold_labels() %>%
-  modify_header(update = label ~ "**Variable**")%>%    # build gtsummary table
-  as_gt() %>%             # convert to gt table
-  gt::gtsave(             # save table as image
-    filename = "predictors2.png"
-  )
-
 
 alldat %>% select("miss","Age","Sex","Highest Education","Race/Ethnicity") %>%
   tbl_summary(by = miss) %>% 
@@ -175,6 +170,6 @@ alldat %>% select("miss","Age","Sex","Highest Education","Race/Ethnicity") %>%
   modify_header(update = label ~ "**Variable**")%>%    # build gtsummary table
   as_gt() %>%             # convert to gt table
   gt::gtsave(             # save table as image
-    filename = "confounders.png"
+    filename = "demographics.png"
   )
 ```
