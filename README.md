@@ -22,7 +22,7 @@ Our work was splitted into several folders in this repo.
 
 1. The missing data analysis conducted was in the [missingValuePlots](/missingValuePlots) and [MissingValueTables](/MissingValueTables) folders, including both code and resulted output.
 2. The Missing value imputations were then performed. In the [MissingValueImputations](/MissingValueImputations) folder, there are several methods that we tried, although we finally settled on using Hmisc. The resulted imputed dataset were saved in a separate folder [ImputedDataset](/ImputedDataset).
-3. The code and output for both unadjusted and adjusted logistic regression (a.k.a. our main analysis) was located in the [LogisticRegression][/LogisticRegression] folder.
+3. The code and output for both unadjusted and adjusted logistic regression (a.k.a. our main analysis) was located in the [LogisticRegression](/LogisticRegression) folder.
 4. Finally, the folder called [report](/report) contains our Rmd used to generate our report, along with all the source plots and tables in the reports.
 
 
