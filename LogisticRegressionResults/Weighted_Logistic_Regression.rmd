@@ -1,0 +1,221 @@
+---
+title: "weighted logistic regression"
+author: "Yuelin He"
+date: "2021/12/13"
+output: pdf_document
+---
+
+```{r}
+library(tidyverse)
+library(srvyr)
+library(survey)
+library(hmisc)
+library(ggplot2)
+library(cowplot)
+library(gtsummary)
+```
+
+
+# Repeated Weighted Logistic Regression Analysis
+
+```{r}
+# read in data
+full <- read.csv("adult20.csv")
+imputed <- lapply(1:5,function(imp){
+  filename <- paste("imputed dataset/imp_data",imp,".csv",sep="")
+  return (read.csv(filename))
+})
+
+binary_var <- c("MHRX_A", "MHTHRPY_A", "DEPEV_A", "DEPMED_A", "ANXEV_A", "ANXMED_A", "CVDDIAG_A", "COVIDTEST_A", "DLYCARE_A", "DNGCARE_A", "VIRAPP12M_A", "HOMECAREDG_A", "FAMCAREDNG_A")
+
+outcome.vars <- c("Took medicine for mental health","Received counseling for mental health","Ever had depression",
+                      "Take medication for depression","Ever had anxiety","Take medication for anxiety")
+
+# function to implement weighted logistic regression; different variables input and step input enabled
+logit.weighted <- function(imputed1, var_name, step=2){
+  imputed1$HHX <- full$HHX
+  imputed1$WTFA_A <- full$WTFA_A
+  imputed1$PSTRAT <- full$PSTRAT
+  imputed1$PPSU <- full$PPSU
+  imputed1_new <- imputed1 %>% select(
+  ##survey design
+  HHX, WTFA_A, URBRRL, REGION, PSTRAT, PPSU,
+  ## outcome
+  MHRX_A, MHTHRPY_A, # mental health
+  DEPEV_A, DEPFREQ_A, DEPMED_A, # depression
+  ANXEV_A, ANXFREQ_A, ANXMED_A, # anxiety
+  ##predictors, contain the imputed values
+  CVDDIAG_A, COVIDTEST_A, 
+  DLYCARE_A, DNGCARE_A, VIRAPP12M_A, 
+  HOMECAREDG_A, FAMCAREDNG_A, 
+  ##confounders ## no NAs
+  AGEP_A, SEX_A, EDUC_A, 
+  HISPALLP_A# r/e
+  )
+
+  # recode yes/no data
+  for (i in binary_var){
+    imputed1_new[,i] <- ifelse(imputed1_new[,i]>=7,NA,imputed1_new[,i])
+    imputed1_new[,i] <- ifelse(is.na(imputed1_new[,i]),'Unknown',imputed1_new[,i])
+    imputed1_new[,i] <- dplyr::recode(as.character(imputed1_new[,i]),
+                                  '1'='Yes','2'='No')
+    imputed1_new[,i] <- factor(imputed1_new[,i],levels=c('No','Yes','Unknown'))
+  }
+
+  # recode others
+  imputed1_new[,'SEX_A'] <- dplyr::recode(as.character(imputed1_new[,'SEX_A']),
+                                  '1'='Male','2'='Female','7'='Refused or Unknown',
+                                  '8'='Refused or Unknown','9'='Refused or Unknown')
+  imputed1_new$EDUC_A <- ifelse(imputed1_new$EDUC_A<=11&imputed1_new$EDUC_A>=5,5,imputed1_new$EDUC_A)
+  imputed1_new$EDUC_A <- ifelse(imputed1_new$EDUC_A<=4,0,imputed1_new$EDUC_A)
+  imputed1_new$EDUC_A <- ifelse(imputed1_new$EDUC_A%in% c(0,5),imputed1_new$EDUC_A,"Unknown")
+  imputed1_new$EDUC_A <- dplyr::recode(as.character(imputed1_new$EDUC_A),
+                                  '0'='High School or Below','5'='College or Above')
+  imputed1_new$EDUC_A <- relevel(as.factor(imputed1_new$EDUC_A),ref='High School or Below')
+  imputed1_new$HISPALLP_A <- dplyr::recode(as.character(imputed1_new$HISPALLP_A),
+                                  '1'='Hispanic','2'='NH White',
+                                  '3'='Black/African American','4'='Asian',
+                                  '5'='AIAN and any other group','6'='AIAN and any other group',
+                                  '7'='Other single and multiple races',
+                                  '97'='Refused','98'='Not ascertained','99'='unknown')
+  imputed1_new$HISPALLP_A <- relevel(as.factor(imputed1_new$HISPALLP_A),ref="NH White")
+  
+  imputed1_new$AGEP_A <- case_when(
+    imputed1_new$AGEP_A<=44 & imputed1_new$AGEP_A>=18 ~ "18-44",
+    imputed1_new$AGEP_A<=64 & imputed1_new$AGEP_A>=45 ~ "45-64",
+    imputed1_new$AGEP_A<=85 & imputed1_new$AGEP_A>=65 ~ "65+",
+    TRUE ~ "Unknown"
+  )
+  imputed1_mhrx <- imputed1_new[imputed1_new[,var_name]!="Unknown",]
+  design1mhrx <- imputed1_mhrx %>%
+    as_survey_design( # might need to change based on our variable names and design
+      ids = HHX,
+      strata = PSTRAT,
+      weights = WTFA_A,
+      nest = TRUE
+    )
+  imputed1_mhrx[,var_name] <- as.integer(ifelse(imputed1_mhrx[,var_name]=='Yes',1,0))
+  
+  if (step==1){
+    logit.formula <- as.formula(paste(var_name,'~CVDDIAG_A + COVIDTEST_A + DLYCARE_A + DNGCARE_A + VIRAPP12M_A + HOMECAREDG_A + FAMCAREDNG_A',collapse=''))
+  } else {
+    logit.formula <- as.formula(paste(var_name,'~CVDDIAG_A + COVIDTEST_A + DLYCARE_A + DNGCARE_A + VIRAPP12M_A + HOMECAREDG_A + FAMCAREDNG_A + AGEP_A + SEX_A + EDUC_A + HISPALLP_A',collapse=''))
+  }
+  
+  
+  MHRX_A_imputed1_logit <- svyglm(
+    logit.formula,
+    family = quasibinomial(), 
+    design = design1mhrx
+  )
+  
+  return (MHRX_A_imputed1_logit)
+}
+
+# for each variable, vectorized implementation of weighted logistic regression
+fit.func.unadjusted <- function(v){
+  fit <- lapply(imputed,logit.weighted,var_name=v,step=1) 
+  pool.result <- pool(fit)
+}
+fit.func <- function(v){
+  fit <- lapply(imputed,logit.weighted,var_name=v) 
+  pool.result <- pool(fit)
+}
+
+# get the odds ratio table
+unadjust.or <- function(i){
+  or <- exp(pool.unadjusted[[i]]$pooled[,'estimate']) # extract and exponentiate coefs
+  se <- summary(pool.unadjusted[[i]])$`std.error`
+  lower <- exp(pool.unadjusted[[i]]$pooled[,'estimate'] - qnorm(0.975) * se) # 95% C.I. lower bound
+  upper <- exp(pool.unadjusted[[i]]$pooled[,'estimate'] + qnorm(0.975) * se) # 95% C.I. higher bound
+  ci <- paste(round(or,2)," (",round(lower,2),"-",round(upper,2),")",sep="")
+  p.val <- summary(pool.unadjusted[[i]])$p.value
+  output <- data.frame(cbind(ci, round(p.val,2)))[-1,] # drop the intercept
+  if (i==1){
+    output <- cbind(c("Ever had COVID","Ever been tested for COVID","Delayed medical care","Unreceived medical care","Virtual medical appointment","Unreceived home care","Unreceived family care"),output)
+    colnames(output) <- c("Covariates","Odds Ratio (95% CI)", "P-value")
+    output.save <- output %>% tibble() %>% gt::gt()  %>%
+  gt::tab_header(
+    title = outcome.vars[i])
+  } else {
+    colnames(output) <- c("Odds Ratio (95% CI)", "P-value")
+    output.save <- output %>% tibble() %>% gt::gt()  %>%
+  gt::tab_header(
+    title = outcome.vars[i])
+  }
+  output.save %>% gt::gtsave(paste(binary_var[i],".odds.png"))
+  return (output)
+}
+get.or <- function(i){
+  or <- exp(pool.result[[i]]$pooled[,'estimate']) # extract and exponentiate coefs
+  se <- summary(pool.result[[i]])$`std.error`
+  lower <- exp(pool.result[[i]]$pooled[,'estimate'] - qnorm(0.975) * se) # 95% C.I. lower bound
+  upper <- exp(pool.result[[i]]$pooled[,'estimate'] + qnorm(0.975) * se) # 95% C.I. higher bound
+  p.val <- summary(pool.result[[i]])$p.value
+  output <- data.frame(cbind(or, lower, upper, p.val))
+  
+  temp.df <- output[-c(1,11,13,15,20),] # drop the unknown/refused/others categories
+  temp.df$vars <- c("Ever had COVID","Ever been tested for COVID","Delayed medical care","Unreceived medical care","Virtual medical appointment","Unreceived home care","Unreceived family care","Age=45-64","Age=65+","Sex=Male","Education=College or Above","Race=AIAN","Race=Asian","Race=Black","Race=Hispanic")
+  temp.df$vars <- factor(temp.df$vars, levels=rev(temp.df$vars))
+
+  write.csv(temp.df,paste(binary_var[i],".odds.csv"))
+  return (temp.df)
+}
+
+# get the diagnositcs table
+get.diagnostics <- function(i){
+  output <- pool.result[[i]]$pooled[,c('df','riv','lambda','fmi')]
+  return (output)
+}
+
+pool.unadjusted <- lapply(binary_var[1:6],fit.func.unadjusted) 
+pool.result <- lapply(binary_var[1:6],fit.func) 
+unadjusted.df <- lapply(1:6,unadjust.or) # get odds ratios of CI
+or.df <- lapply(1:6,get.or) # get the odds ratios and CI
+diagn.df <- lapply(1:6,get.diagnostics)
+
+```
+
+# Forest plots
+
+```{r}
+plot.list <- list()
+# generate six different plots, each saved as an element in the list
+for (i in 1:6){
+  temp.df$variable.types <- factor(c("COVID test","COVID test",rep("Changed medical care due to COVID",3),rep("Changed home/family care due to COVID",2),rep("Demographic",8)),
+                                levels=c("COVID test","Changed medical care due to COVID",
+    "Changed home/family care due to COVID","Demographic"))
+  
+  plot.list[[i]] <- ggplot(temp.df, aes(y = or, x = vars, color=variable.types)) + 
+    geom_hline(yintercept = 1, linetype = 2) + 
+    geom_point(size=5) + 
+    geom_errorbar(aes(ymin = lower, ymax = upper), width = .6) + 
+    scale_y_log10() + 
+    coord_flip() + 
+    annotate("text", y = rev(temp.df$or), x = 1:nrow(temp.df), label = round(rev(temp.df$or), 2), size=1.8, color="white") + 
+    labs(
+      title = outcome.vars[i],
+      x = element_blank(),
+      y = "Odds Ratio",
+    ) + theme_bw() +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(hjust=0.5, size=10, face="bold"))
+  if (i%%2==0){ # plots on right do not need to have vertical labels
+    plot.list[[i]] <-  plot.list[[i]]  + theme(axis.text.y = element_text(size = 0),legend.position = 'right')
+  }
+  if (i<5){ # plots above the bottom row do not need horizontal labels
+    plot.list[[i]] <-  plot.list[[i]] + theme(axis.text.x = element_text(size = 0)) + labs(y = element_blank())
+  }
+}
+
+# save the plot
+png(file="forest_plots.png",
+width=3000, height=3000,res=320)
+plot_grid(plot.list[[1]],plot.list[[2]],
+          plot.list[[3]],plot.list[[4]],
+          plot.list[[5]],plot.list[[6]],
+          ncol=2,rel_widths = c(1.1,1.5))
+dev.off()
+```
+
