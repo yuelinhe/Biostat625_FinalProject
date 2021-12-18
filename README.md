@@ -1,6 +1,6 @@
 # Biostat 625 Final Project - Group 1
 
-### Author Contributions:
+### Author Contributions
 
 Yuelin He: cleaned the data; generated missing data analysis table; ran logistic regression and generated forest plots; for the report, wrote part of background section, part of methods section.
 
@@ -26,7 +26,7 @@ Our work was splitted into several folders in this repo.
 4. Finally, the folder called [report](/report) contains our Rmd used to generate our report, along with all the source plots and tables in the reports.
 
 
-### Credits:
+### Credits
 
 In addition to those we refered to in our reference list of the report, We would like to thank Dr. Hui Jiang for the feedback on our project and for the useful tips in the class, and Jingyi Zhai for the advice along the way.
 
