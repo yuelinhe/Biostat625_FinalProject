@@ -6,7 +6,7 @@ The project used 2020 National Health Interview Survey (NHIS) data to investigat
 
 
 
-Contributions:
+### Contributions:
 
 Yuelin He: cleaned the data; generated missing data analysis table; ran logistic regression and generated forest plots; for the report, wrote part of background section, part of methods section.
 
